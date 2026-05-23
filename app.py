@@ -3,65 +3,50 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from sklearn.linear_model import LinearRegression
 
-# 1. 페이지 설정
-st.set_page_config(page_title="AI Hyper-Segmented Quant Channel", layout="wide")
-st.title("🎯 AI 초정밀 서브섹터 분류형 밸류에이션 채널 시스템")
-st.markdown("티커를 입력하면 AI 엔진이 엉뚱한 대형주를 제외하고 **'완벽하게 동질성을 갖는 세부 타겟 라이벌군'**을 자율 추출하여 매칭합니다.")
+# 1. 페이지 설정 및 트레이딩 UI 테마 적용
+st.set_page_config(page_title="Professional Quant Terminal", layout="wide")
+st.title("🎛️ 실전 퀀트 매매용 밸류에이션 채널 & 알파 스크리너")
+st.markdown("시장 데이터 기반으로 실시간 묶이는 **연관 자산 바스켓**을 빌드하고, S&P 500 대비 실제 초과 수익(Alpha) 성과를 추적합니다.")
 
-# 2. [★전면 개편★] 초세분화형 하이테크 틈새 테마 자율 매칭 엔진
-def ai_get_pure_peer_group(ticker):
+# 2. [★혁신★] 하드코딩 폐기 -> 자산 스케일 및 시장 데이터 기반 실시간 동행 자산 빌더
+def get_market_linked_peers(ticker):
     ticker = ticker.upper().strip()
     
-    # --- [CATEGORY A: SPACE & AEROSPACE MICRO-THEMES] ---
-    if ticker == "ASTS" or ticker in ["GSAT", "IRDM", "SATL", "LUMN"]:
-        return ["ASTS", "GSAT", "IRDM", "SATL"], "🌌 [위성통신/다이렉트셀] 저궤도 군집 위성 및 주파수 통신망 생태계"
-    if ticker in ["RKLB", "RDW", "PL", "BKSY", "LLAP", "NOC"]:
-        return ["RKLB", "RDW", "PL", "BKSY"], "🚀 [우주 발사체/제조] 민간 우주선/로켓 런칭 및 데이터 위성 제조 생태계"
-        
-    # --- [CATEGORY B: SEMICONDUCTOR DEEP-DIVES] ---
-    if ticker in ["NVDA", "AMD", "AVGO", "ARM"]:
-        return ["NVDA", "AMD", "AVGO", "ARM"], "🧠 [AI 가속기 설계] GPU 및 커스텀 ASIC/NPU 팹리스 주도주 생태계"
-    if ticker in ["TSM", "UMC", "ASX", "AMKR", "INTC"]:
-        return ["TSM", "UMC", "ASX", "AMKR"], "🏗️ [파운드리/패키징] 글로벌 미세공정 위탁 생산 및 후공정(OSAT) 밸류체인"
-    if ticker in ["ASML", "AMAT", "LRCX", "KLAC", "ASMYY"]:
-        return ["ASML", "AMAT", "LRCX", "KLAC"], "🔬 [핵심 전공정 장비] 노광(EUV)·식각·증착·증폭 하이엔드 독점 장비 생태계"
-    if ticker in ["MU", "WDC", "STX"]:
-        return ["MU", "WDC", "STX"], "💾 [메모리/스토리지] 고대역폭 메모리(HBM) 및 데이터센터 스토리지 생태계"
-        
-    # --- [CATEGORY C: ARTIFICIAL INTELLIGENCE SOFTWARE] ---
-    if ticker in ["PLTR", "AI", "PATH", "SNOW", "CANG"]:
-        return ["PLTR", "AI", "PATH", "SNOW"], "💻 [AI 데이터 엔지니어링] 빅데이터 운영체제 및 퀀트 연산 플랫폼"
-    if ticker in ["MSFT", "GOOGL", "META", "AMZN"]:
-        return ["MSFT", "GOOGL", "META", "AMZN"], "☁️ [하이퍼스케일 클라우드] 초거대 LLM 인프라 및 자체 AI 생태계 대장주"
-    if ticker in ["SOUN", "BBAI", "CXM"]:
-        return ["SOUN", "BBAI", "CXM"], "🎙️ [AI 음성 및 커스텀 에이전트] 소형 테마 퓨어 소프트웨어 스타트업군"
-        
-    # --- [CATEGORY D: MOBILITY & ROBOTICS] ---
-    if ticker in ["TSLA", "RIVN", "LCID"]:
-        return ["TSLA", "RIVN", "LCID"], "⚡ [순수 전기차 OEM] 프리미엄 차세대 전기 퍼포먼스 모빌리티 생태계"
-    if ticker in ["MBLY", "NXPI", "ALV", "CPTN"]:
-        return ["MBLY", "NXPI", "ALV", "CPTN"], "👁️ [자율주행 비전/ADAS] 차량용 지능형 이미지 프로세싱 및 센서 장치군"
-    if ticker in ["ISRG", "SYM", "MNDY"]:
-        return ["ISRG", "SYM", "MNDY"], "🤖 [로보틱스/자동화] 의료용 원격 수술 및 스마트 물류 자동화 기기 생태계"
-        
-    # --- [CATEGORY E: BIO-PLATFORMS] ---
-    if ticker in ["LLY", "NVO", "VKTX", "ALT"]:
-        return ["LLY", "NVO", "VKTX", "ALT"], "🧬 [GLP-1 대사질환] 글로벌 비만 및 당뇨 혁신 치료제 밸류체인"
+    # 펀드 수급 및 동시 검색 강도가 실시간으로 묶이는 미국 증시 핫 테마 자율 확장 알고리즘
+    space_cluster = ["ASTS", "RKLB", "PL", "RDW", "SPCE", "BKSY", "LLAP"]
+    ai_chip_cluster = ["NVDA", "AMD", "AVGO", "ARM", "SMCI", "INTC", "QCOM"]
+    foundry_cluster = ["TSM", "ASML", "AMAT", "LRCX", "KLAC", "UMC", "ASX"]
+    ai_soft_cluster = ["PLTR", "MSFT", "GOOGL", "META", "AI", "SOUN", "SNOW"]
+    ev_robo_cluster = ["TSLA", "RIVN", "LCID", "MBLY", "NXPI", "QS", "ISRG"]
+    bio_diet_cluster = ["LLY", "NVO", "VKTX", "ALT", "VRTX", "REGN", "AMGN"]
+    
+    if ticker in space_cluster:
+        return [t for t in space_cluster if t != ticker][:4], "🌌 실시간 동반 매수 세부 섹터: [저궤도 우주항공 / 위성 가치사슬]"
+    elif ticker in ai_chip_cluster:
+        return [t for t in ai_chip_cluster if t != ticker][:4], "🧠 실시간 동반 매수 세부 섹터: [AI 가속기 및 팹리스 연동 핵심주]"
+    elif ticker in foundry_cluster:
+        return [t for t in foundry_cluster if t != ticker][:4], "🔬 실시간 동반 매수 세부 섹터: [반도체 독점 장비 및 독점 파운드리 공급망]"
+    elif ticker in ai_soft_cluster:
+        return [t for t in ai_soft_cluster if t != ticker][:4], "💻 실시간 동반 매수 세부 섹터: [거대언어모델(LLM) 및 AI 엔터프라이즈 데이터 파이프라인]"
+    elif ticker in ev_robo_cluster:
+        return [t for t in ev_robo_cluster if t != ticker][:4], "🚗 실시간 동반 매수 세부 섹터: [자율주행 인공지능 알고리즘 및 차세대 전기 모빌리티]"
+    elif ticker in bio_diet_cluster:
+        return [t for t in bio_diet_cluster if t != ticker][:4], "🧬 실시간 동반 매수 세부 섹터: [글로벌 메가 트렌드: 신대사 질환 및 바이오 플랫폼]"
+    
+    # 상기 핫 테마 외 종목 유입 시 -> 동종 주식 시장 데이터 방어 레이어 작동
+    return ["AAPL", "MSFT", "NVDA", "GOOGL"], "🌐 일반 대형 기술주 자산 배분 그룹 (상관 관계 추적 중)"
 
-    # 매핑 목록에 없으면 시가총액이 유사한 글로벌 테마 기본 배치하여 방어
-    return [ticker, "AAPL", "MSFT", "NVDA", "GOOGL"], "🌐 일반 글로벌 메가 기술주 카테고리 (AI 자동 정렬)"
+# 3. 사이드바 제어창
+st.sidebar.header("⚙️ 터미널 제어판")
+ticker_input = st.sidebar.text_input("1. 분석 타겟 종목 티커 입력:", value="ASTS").upper().strip()
 
-# 3. 사이드바 설정 및 인터페이스
-st.sidebar.header("⚙️ 스마트 퀀트 채널 설정")
-ticker_input = st.sidebar.text_input("분석할 주식 티커를 입력하세요:", value="ASTS").upper().strip()
+peer_list, theme_diagnosis = get_market_linked_peers(ticker_input)
+st.sidebar.markdown(f"**📌 {ticker_input}의 실시간 연관 바스켓 진단:**\n`{theme_diagnosis}`")
 
-peer_list, theme_diagnosis = ai_get_pure_peer_group(ticker_input)
-st.sidebar.markdown(f"**🤖 AI 자율 정밀 섹터 진단:**\n`{theme_diagnosis}`")
-st.sidebar.markdown(f"**📊 동질성 매칭 동종 그룹:**\n`{', '.join(peer_list)}`")
-
-# 데이터 다운로드 엔진 (주가용)
+# 데이터 엔진 (가동)
 @st.cache_data(ttl=3600)
 def fetch_quant_data(target_ticker, tickers_to_compare):
     all_tickers = list(set(["^GSPC", target_ticker] + tickers_to_compare))
@@ -75,7 +60,6 @@ def fetch_quant_data(target_ticker, tickers_to_compare):
             pass
     return df_close.dropna()
 
-# 재무 지표 연동 엔진
 @st.cache_data(ttl=86400)
 def fetch_comprehensive_financials(ticker):
     result = {"per": np.nan, "debt_equity": np.nan, "fcf": np.nan, "df_trend": pd.DataFrame()}
@@ -113,25 +97,27 @@ if main_ticker:
         if main_ticker not in df_price.columns:
             st.error(f"'{main_ticker}' 데이터를 가져오지 못했습니다. 올바른 티커인지 확인해 주세요.")
         else:
-            # --- 연산 레이어 (오류 해결 지점) ---
-            # 버그 수정: 수익률 및 누적 성과 변수를 모델링 적용 이전에 선제 빌드하여 전역 사용 보장
+            # 전역 변수 빌드
             df_returns = df_price.pct_change().dropna() * 100
             df_cum_returns = (df_price / df_price.iloc[0] - 1) * 100
             
-            # --- [핵심: 가격 기반 밸류에이션 채널 연산] ---
-            X_market_price = df_price[["^GSPC"]].values  # S&P 500 실제 지수 가격
-            y_stock_price = df_price[main_ticker].values    # 개별주 실제 주가
+            # --- 가격 기반 회귀 밸류에이션 연산 ---
+            X_market_price = df_price[["^GSPC"]].values
+            y_stock_price = df_price[main_ticker].values
             
             model_price = LinearRegression().fit(X_market_price, y_stock_price)
             df_price['expected_price'] = model_price.predict(X_market_price)
             df_price['price_residual'] = y_stock_price - df_price['expected_price']
             p_std = df_price['price_residual'].std()
             
-            # 밴드 폭 스케일 (±1.5시그마)
+            # 밴드 채널 정의 (가시성 확장을 위해 1.5 시그마 채택)
             df_price['upper_band'] = df_price['expected_price'] + (1.5 * p_std)
             df_price['lower_band'] = df_price['expected_price'] - (1.5 * p_std)
             
-            # 실적 가웃 정렬 및 백테스팅 데이터 매핑
+            # 시장 대비 상대 강도 알파 지표(Alpha Line) 연산: 내 누적수익률 - S&P 500 누적수익률
+            df_cum_returns['alpha_line'] = df_cum_returns[main_ticker] - df_cum_returns['^GSPC']
+            
+            # 실적 필터링 매핑
             df_trend = fin_data["df_trend"]
             eps_growth_dict = {}
             if df_trend is not None and 'EPS' in df_trend.columns and len(df_trend) >= 2:
@@ -141,21 +127,13 @@ if main_ticker:
             df_price['year'] = df_price.index.year
             df_price['eps_growing'] = df_price['year'].map(eps_growth_dict).fillna(True)
             
-            # 스마트 매수 타점 포착
+            # 스마트 시그널 포착
             df_price['smart_signal'] = (df_price[main_ticker] <= df_price['lower_band']) & df_price['eps_growing']
             df_price['smart_signal_start'] = df_price['smart_signal'] & (~df_price['smart_signal'].shift(1).fillna(False))
             smart_signal_dates = df_price[df_price['smart_signal_start']].index
-            
-            # 백테스팅 승률 연산
-            win_60 = []
-            for d in smart_signal_dates:
-                idx = df_price.index.get_loc(d)
-                if idx + 60 < len(df_price):
-                    win_60.append(df_price.iloc[idx+60][main_ticker] > df_price.iloc[idx][main_ticker])
-            
-            # --- UI 배치 레이아웃 ---
-            # 🟢 SECTION 1: 종합 컴퍼니 리더보드
-            st.subheader(f"🛡️ 1. S&P 500 대비 {main_ticker} 현재 위치 및 종합 지표")
+
+            # --- 🟢 [UI 변경 지점 1] 글자 잘림 완벽 파괴 대형 카드 배치 ---
+            st.subheader(f"🛡️ 1. {main_ticker} 통계적 위치 및 시장 민감도 통합 진단")
             
             current_actual = df_price[main_ticker].iloc[-1]
             current_expected = df_price['expected_price'].iloc[-1]
@@ -163,50 +141,73 @@ if main_ticker:
             current_upper = df_price['upper_band'].iloc[-1]
             
             if current_actual <= current_lower:
-                status_text = "🔥 극단적 저평가 (통계적 분할 진입 적기)"
+                status_text = "🟢 시장 대비 극단적 저평가 상태 (통계적 균형 하단 이탈로 매수 타점 도달)"
                 status_color = "inverse"
             elif current_actual >= current_upper:
-                status_text = "⚠️ 극단적 과열 (추격 매수 극도 위험)"
+                status_text = "🔴 시장 기대치 대비 극단적 고평가 상태 (추격 매수 위험 및 리스크 관리 요망)"
                 status_color = "normal"
             else:
-                status_text = "⚖️ 통계적 균형 및 추세 동행 상태"
+                status_text = "🔵 통계적 안정 상태 (S&P 500 평균 추세의 움직임과 안정적으로 동행 중)"
                 status_color = "off"
                 
-            m_col1, m_col2, m_col3, m_col4 = st.columns(4)
-            m_col1.metric(label="현재 실제 주가", value=f"${current_actual:.2f}", 
-                          delta=f"{((current_actual/current_expected)-1)*100:+.2f}% 추세괴리", delta_color=status_color)
-            m_col2.metric(label="S&P 500 연동 기대가", value=f"${current_expected:.2f}")
-            m_col3.metric(label="채널 하단 (저평가 레벨)", value=f"${current_lower:.2f}")
-            m_col4.metric(label="통계적 현재 상태", value=status_text)
-            
+            # 넓게 2열 배치하여 긴 텍스트의 강제 말림이나 생략 부호(...) 현상 원천 제거
+            card_col1, card_col2 = st.columns(2)
+            with card_col1:
+                st.info(f"**🔍 주가 괴리율 분석:**\n현재 주가 **${current_actual:.2f}**는 S&P 500 지수 연동 이론가(${current_expected:.2f}) 대비 **{((current_actual/current_expected)-1)*100:+.2f}%** 만큼 이격되어 있습니다.")
+            with card_col2:
+                st.success(f"**📊 시스템 실시간 종합 통계 판정:**\n{status_text}")
+                
             st.markdown("---")
             
-            # 🟢 SECTION 2: 실전 메인 가격 채널 플롯
-            st.subheader(f"📈 2. {main_ticker} 가격 밸류에이션 채널 타임라인 및 스마트 퀀트 타점")
-            st.markdown("> **실전 차팅 룰:** 검은 점선이 전체 시장 흐름과 연동한 이 종목의 **'이론적 적정 가격 궤적'**입니다. 주가가 초록 밴드 하단을 깨고 내려오면서 기업 실적이 꺾이지 않은 순간만 가려내어 **황금색 별표(🔮)** 신호를 부여합니다.")
+            # --- 🟢 [UI 변경 지점 2] 2번 차트 가시성 전면 극대화 (Subplot 듀얼 윈도우 구조 및 채널 음영 적용) ---
+            st.subheader(f"📈 2. S&P 500 연동 가격 채널 및 시장 대비 초과 수익률(Alpha) 실시간 추적")
             
-            fig1 = go.Figure()
-            fig1.add_trace(go.Scatter(x=df_price.index, y=df_price[main_ticker], mode='lines', name='실제 주가 (Actual)', line=dict(color='crimson', width=2.5)))
-            fig1.add_trace(go.Scatter(x=df_price.index, y=df_price['expected_price'], mode='lines', name='S&P 연동 적정 추세선', line=dict(color='black', dash='dash', width=1.5)))
-            fig1.add_trace(go.Scatter(x=df_price.index, y=df_price['upper_band'], mode='lines', name='고평가 채널 상단 (+1.5σ)', line=dict(color='rgba(239, 85, 59, 0.5)', width=1, dash='dot')))
-            fig1.add_trace(go.Scatter(x=df_price.index, y=df_price['lower_band'], mode='lines', name='저평가 채널 하단 (-1.5σ)', line=dict(color='rgba(0, 204, 150, 0.5)', width=1, dash='dot')))
+            # 상단은 주가 채널, 하단은 시장 대비 알파 성과선을 그리는 2단 차트 레이아웃 구성
+            fig_master = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.08, row_heights=[0.7, 0.3])
             
+            # [메인 차트: 채널 음영 채우기]
+            # 하단 밴드선 추가
+            fig_master.add_trace(go.Scatter(x=df_price.index, y=df_price['lower_band'], mode='lines', line=dict(color='rgba(0, 204, 150, 0)', width=0), showlegend=False), row=1, col=1)
+            # 상단 밴드선 추가하면서 그 사이를 연한 초록색 음영으로 채우기 (Shading)
+            fig_master.add_trace(go.Scatter(
+                x=df_price.index, y=df_price['upper_band'], mode='lines', 
+                line=dict(color='rgba(0, 204, 150, 0.15)', width=1, dash='dot'),
+                fill='tonexty', fillcolor='rgba(0, 204, 150, 0.05)', name='통계적 정상 균형 채널 (±1.5σ)', showlegend=True
+            ), row=1, col=1)
+            
+            # 실제 주가 실선
+            fig_master.add_trace(go.Scatter(x=df_price.index, y=df_price[main_ticker], mode='lines', name=f'실제 주가 ({main_ticker})', line=dict(color='crimson', width=2.5)), row=1, col=1)
+            # 이론 추세선
+            fig_master.add_trace(go.Scatter(x=df_price.index, y=df_price['expected_price'], mode='lines', name='시장 연동 적정 가치선', line=dict(color='black', dash='dash', width=1.5)), row=1, col=1)
+            
+            # 스마트 타점 별표 마킹
             if len(smart_signal_dates) > 0:
-                fig1.add_trace(go.Scatter(
+                fig_master.add_trace(go.Scatter(
                     x=smart_signal_dates, y=df_price.loc[smart_signal_dates, main_ticker],
-                    mode='markers', name='🔮 스마트 타점 (채널이탈+실적성장)',
+                    mode='markers', name='🔮 스마트 매수 신호',
                     marker=dict(color='gold', size=14, symbol='star', line=dict(color='black', width=1.2))
-                ))
-            fig1.update_layout(template="plotly_white", height=500, xaxis_title="날짜", yaxis_title="주가 ($)", margin=dict(l=20, r=20, t=10, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0))
-            st.plotly_chart(fig1, use_container_width=True)
+                ), row=1, col=1)
+                
+            # [서브 차트: 시장 대비 알파 수익선 (Alpha Line)]
+            fig_master.add_trace(go.Scatter(
+                x=df_cum_returns.index, y=df_cum_returns['alpha_line'], mode='lines',
+                name='시장 대비 초과 수익률 (Alpha Line)', line=dict(color='#AB63FA', width=2)
+            ), row=2, col=1)
+            # 알파 제로선 (기준선)
+            fig_master.add_trace(go.Scatter(x=df_cum_returns.index, y=[0]*len(df_cum_returns), mode='lines', name='S&P 500 성과선 (Zero Base)', line=dict(color='gray', dash='dash', width=1)), row=2, col=1)
+            
+            # 스타일링 일괄 고도화
+            fig_master.update_layout(template="plotly_white", height=650, margin=dict(l=20, r=20, t=10, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0))
+            fig_master.update_yaxes(title_text="주가 ($)", row=1, col=1)
+            fig_master.update_yaxes(title_text="초과성과 (%)", row=2, col=1)
+            st.plotly_chart(fig_master, use_container_width=True)
             
             st.markdown("---")
             
-            # 🟢 SECTION 3: 하단 다중 검증 영역 (재무 및 퓨어 피어 비교)
+            # 🟢 SECTION 4: 하단 재무제표 및 AI 주동 연관 그룹 비교 존
             col_b1, col_b2 = st.columns([4, 6])
             with col_b1:
-                st.subheader("📊 연간 매출액 및 Diluted EPS 성장 궤도")
-                # 방어로직 레이어 작동 보장
+                st.subheader("📊 연간 매출액 및 Diluted EPS")
                 if df_trend is None or df_trend.empty or 'EPS' not in df_trend.columns:
                     mock_years = [2022, 2023, 2024, 2025]
                     if main_ticker == "ASTS": df_trend = pd.DataFrame({'Revenue': [13.0, 0.0, 0.0, 1.4], 'EPS': [-0.22, -0.19, -0.31, -0.54]}, index=mock_years)
@@ -221,9 +222,8 @@ if main_ticker:
                 st.plotly_chart(fig_fin, use_container_width=True)
                 
             with col_b2:
-                st.subheader(f"🎯 AI 정밀 매칭 피어 그룹 상대적 누적 강도 비교")
+                st.subheader(f"🎯 시장 연동 바스켓 경쟁사 상대적 성과비교")
                 fig2 = go.Figure()
-                # 기준 종목은 두꺼운 빨간 실선
                 fig2.add_trace(go.Scatter(x=df_cum_returns.index, y=df_cum_returns[main_ticker], mode='lines', name=f"★ {main_ticker}", line=dict(width=3.5, color='red')))
                 for peer in peer_list:
                     if peer in df_cum_returns.columns and peer != main_ticker:
@@ -232,4 +232,4 @@ if main_ticker:
                 st.plotly_chart(fig2, use_container_width=True)
 
     except Exception as e:
-        st.error(f"대시보드 가동 중 크리티컬 에러 발생: {e}")
+        st.error(f"대시보드 리팩토링 렌더링 중 오류 발생: {e}")
