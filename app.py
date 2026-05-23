@@ -3,109 +3,148 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from sklearn.linear_model import LinearRegression
 
-# 1. 페이지 설정
-st.set_page_config(page_title="S&P 500 vs Stocks Regression", layout="wide")
-st.title("📈 S&P 500 대비 개별 종목 회귀 분석 (최근 5개년)")
-st.markdown("S&P 500(`^GSPC`) 수익률을 X축, 선택한 종목의 수익률을 Y축으로 설정하여 Linear Regression 분석을 수행합니다.")
+# 1. 페이지 및 섹터 데이터 설정
+st.set_page_config(page_title="Advanced Stock Analysis", layout="wide")
+st.title("📊 S&P 500 & 섹터 대비 시계열 고/저평가 및 주도주 비교 대시보드")
 
-# 2. 사이드바 - 티커 선택 및 데이터 설정
-st.sidebar.header("⚙️ 설정")
-ticker_input = st.sidebar.text_input("분석할 주식 티커를 입력하세요:", value="AAPL").upper().strip()
+# 미국 11대 섹터 매핑 테이블 (대표 ETF 및 상위 주도주 5개)
+SECTOR_MAP = {
+    "XLK": {"name": "Technology (기술)", "peers": ["MSFT", "AAPL", "NVDA", "AVGO", "ORCL"]},
+    "XLY": {"name": "Consumer Discretionary (임의소비재)", "peers": ["AMZN", "TSLA", "HD", "NKE", "MCD"]},
+    "XLC": {"name": "Communication Services (통신)", "peers": ["META", "GOOGL", "NFLX", "TMUS", "DIS"]},
+    "XLF": {"name": "Financials (금융)", "peers": ["BRK-B", "JPM", "V", "MA", "BAC"]},
+    "XLV": {"name": "Health Care (헬스케어)", "peers": ["LLY", "UNH", "JNJ", "MRK", "ABBV"]},
+    "XLP": {"name": "Consumer Staples (필수소비재)", "peers": ["PG", "COST", "WMT", "KO", "PEP"]},
+    "XLE": {"name": "Energy (에너지)", "peers": ["XOM", "CVX", "COP", "SLB", "EOG"]},
+    "XLI": {"name": "Industrials (산업재)", "peers": ["GE", "CAT", "UNP", "HON", "RTX"]},
+    "XLB": {"name": "Materials (소재)", "peers": ["LIN", "APD", "SHW", "FCX", "NEM"]},
+    "XLRE": {"name": "Real Estate (부동산)", "peers": ["PLD", "AMT", "EQIX", "WELL", "CCI"]},
+    "XLU": {"name": "Utilities (유틸리티)", "peers": ["NEE", "SO", "DUK", "CEG", "AEP"]}
+}
 
-# 데이터 캐싱 (속도 및 중복 요청 방지)
+# 티커별 섹터 자동 매칭용 가이드 (사용자 편의용 기본 매칭)
+TICKER_TO_SECTOR = {
+    "AAPL": "XLK", "MSFT": "XLK", "NVDA": "XLK", "AVGO": "XLK", "ORCL": "XLK",
+    "AMZN": "XLY", "TSLA": "XLY", "HD": "XLY",
+    "META": "XLC", "GOOGL": "XLC", "NFLX": "XLC",
+    "JPM": "XLF", "BRK-B": "XLF", "LLY": "XLV", "UNH": "XLV", "WMT": "XLP", "PG": "XLP",
+    "XOM": "XLE", "CVX": "XLE", "GE": "XLI", "CAT": "XLI"
+}
+
+# 2. 사이드바 입력 설정
+st.sidebar.header("⚙️ 분석 설정")
+ticker_input = st.sidebar.text_input("분석할 주식 티커:", value="AAPL").upper().strip()
+
+# 해당 티커의 섹터 추정 및 선택
+default_sector = TICKER_TO_SECTOR.get(ticker_input, "XLK")
+sector_key = st.sidebar.selectbox(
+    "종목의 해당 섹터 ETF를 선택하세요:", 
+    options=list(SECTOR_MAP.keys()), 
+    index=list(SECTOR_MAP.keys()).index(default_sector),
+    format_func=lambda x: f"{x} - {SECTOR_MAP[x]['name']}"
+)
+
+sector_info = SECTOR_MAP[sector_key]
+peers = sector_info["peers"]
+
+# 데이터 다운로드 함수 (캐싱 처리)
 @st.cache_data(ttl=3600)
-def load_data(ticker):
-    # 최신 yfinance 버전에 대응하기 위해 각각 다운로드 후 결합하는 방식 채택
-    # auto_adjust=True 일 경우 'Close' 컬럼에 수정종가(Adjusted Close)가 자동 반영됩니다.
-    sp500 = yf.download("^GSPC", period="5y", auto_adjust=True)
-    stock = yf.download(ticker, period="5y", auto_adjust=True)
+def fetch_all_data(main_ticker, sector_etf, peer_list):
+    all_tickers = ["^GSPC", sector_etf, main_ticker] + peer_list
+    raw_data = yf.download(all_tickers, period="5y", auto_adjust=True)
     
-    if sp500.empty or stock.empty:
-        return pd.DataFrame()
-        
-    # 복잡해진 2중 컬럼(Multi-Index) 구조를 1차원으로 단순화
-    sp500.columns = sp500.columns.get_level_values(0)
-    stock.columns = stock.columns.get_level_values(0)
+    # 구조 평탄화 및 Close 가격만 추출
+    if isinstance(raw_data.columns, pd.MultiIndex):
+        raw_data.columns = raw_data.columns.get_level_values(0)
     
-    # 두 데이터셋의 종가(Close)만 추출하여 하나의 데이터프레임으로 병합
-    df = pd.DataFrame({
-        "^GSPC": sp500["Close"],
-        ticker: stock["Close"]
-    }).dropna()
-    
-    # 일별 수익률(Percentage Change) 계산 (%)
-    returns = df.pct_change().dropna() * 100
-    return returns
+    # 다운로드된 데이터에서 Close 컬럼 가려내기 (yfinance 버전에 따라 일괄 다운 시 MultiIndex 처리 분기)
+    # 안전하게 각 티커별 Close를 쪼개어 결합
+    df_close = pd.DataFrame()
+    for t in all_tickers:
+        try:
+            t_data = yf.download(t, period="5y", auto_adjust=True)
+            if isinstance(t_data.columns, pd.MultiIndex):
+                df_close[t] = t_data['Close'].iloc[:, 0] if t_data['Close'].shape[1] > 1 else t_data['Close']
+            else:
+                df_close[t] = t_data['Close']
+        except:
+            pass
+            
+    return df_close.dropna()
 
 try:
-    with st.spinner("야후 파이낸스에서 5개년 데이터를 불러오는 중..."):
-        df_returns = load_data(ticker_input)
-    
-    if df_returns.empty:
-        st.error(f"티커 '{ticker_input}'의 데이터를 가져오지 못했습니다. 올바른 티커(예: AAPL, TSLA, NVDA)인지 확인해주세요.")
+    with st.spinner("미국 증시 데이터 및 섹터 주도주 데이터를 동시 로드 중..."):
+        df_price = fetch_all_data(ticker_input, sector_key, peers)
+        
+    if ticker_input not in df_price.columns:
+        st.error(f"'{ticker_input}' 데이터를 불러오지 못했습니다. 티커를 확인해 주세요.")
     else:
-        x_col = "^GSPC"
-        y_col = ticker_input
+        # --- [데이터 가공] ---
+        # 1. 일별 수익률 계산 (회귀분석용)
+        df_returns = df_price.pct_change().dropna() * 100
+        
+        # 2. 누적 수익률 계산 (시계열 비교용)
+        df_cum_returns = (df_price / df_price.iloc[0] - 1) * 100
+        
+        # --- [1번 기능: S&P 500 대비 시계열 고/저평가 밴드] ---
+        # 수익률 기반 리니어 리그레션 실행
+        X_sp = df_returns[["^GSPC"]].values
+        y_stock = df_returns[ticker_input].values
+        
+        model_sp = LinearRegression()
+        model_sp.fit(X_sp, y_stock)
+        
+        # 일별 '예측 수익률'과 '실제 수익률'의 차이 = 잔차(Residual)
+        predicted_returns = model_sp.predict(X_sp)
+        residuals = y_stock - predicted_returns
+        
+        # 잔차의 누적값(Cumulative Residuals)을 구해 시계열적인 고/저평가 트렌드 산출
+        cum_residuals = np.cumsum(residuals)
+        res_std = np.std(cum_residuals)
+        
+        # 시계열 차트 그리기 1
+        st.subheader(f"1. S&P 500 대비 고평가 / 저평가 시계열 추세 ({ticker_input})")
+        st.markdown("> **차트 해석:** 중앙선(0)은 S&P 500과 완벽하게 발맞추어 간 평균 추세입니다. 선이 **상단 빨간 밴드(+2σ)**에 근접하면 시장 대비 과열(고평가) 상태이므로 조심해야 하며, **하단 초록 밴드(-2σ)**에 도달하면 시장 대비 과매도(저평가) 상태로 **매력적인 진입 타이밍**으로 볼 수 있습니다.")
+        
+        fig1 = go.Figure()
+        fig1.add_trace(go.Scatter(x=df_returns.index, y=cum_residuals, mode='lines', name='S&P 500 대비 이격도(잔차 누적)', line=dict(color='blue', width=2)))
+        fig1.add_trace(go.Scatter(x=df_returns.index, y=[0]*len(df_returns), mode='lines', name='평균 추세선', line=dict(color='black', dash='dash')))
+        fig1.add_trace(go.Scatter(x=df_returns.index, y=[2*res_std]*len(df_returns), mode='lines', name='고평가 임계선 (+2σ)', line=dict(color='red', dash='dot')))
+        fig1.add_trace(go.Scatter(x=df_returns.index, y=[-2*res_std]*len(df_returns), mode='lines', name='저평가 기회선 (-2σ)', line=dict(color='green', dash='dot')))
+        
+        fig1.update_layout(template="plotly_white", height=400, xaxis_title="날짜", yaxis_title="상대적 과열/과매도 강도", margin=dict(l=20, r=20, t=20, b=20))
+        st.plotly_chart(fig1, use_container_width=True)
+        
+        
+        # --- [2번 기능: 섹터 ETF 대비 상대 강도 및 추세선] ---
+        st.subheader(f"2. {sector_info['name']} 섹터 ETF({sector_key}) 대비 누적 성과 비교")
+        
+        fig2 = go.Figure()
+        fig2.add_trace(go.Scatter(x=df_cum_returns.index, y=df_cum_returns[ticker_input], mode='lines', name=f"{ticker_input} 누적수익률", line=dict(width=2.5, color='#636EFA')))
+        fig2.add_trace(go.Scatter(x=df_cum_returns.index, y=df_cum_returns[sector_key], mode='lines', name=f"{sector_key} (섹터평균) 누적수익률", line=dict(width=2, color='#AB63FA', dash='dash')))
+        
+        fig2.update_layout(template="plotly_white", height=400, xaxis_title="날짜", yaxis_title="누적 수익률 (%)", margin=dict(l=20, r=20, t=20, b=20))
+        st.plotly_chart(fig2, use_container_width=True)
+        
+        
+        # --- [3번 기능: 섹터 내 상위 주도주 5개와 비교] ---
+        st.subheader(f"3. 섹터 내 TOP 5 주도주 vs {ticker_input} 5개년 성과 비교")
+        st.markdown("선택한 종목이 섹터 대장주들(시가총액 상위) 사이에서 얼마나 강한 포지션을 잡고 있는지 확인합니다.")
+        
+        fig3 = go.Figure()
+        # 내 종목 강조
+        fig3.add_trace(go.Scatter(x=df_cum_returns.index, y=df_cum_returns[ticker_input], mode='lines', name=f"★ {ticker_input}", line=dict(width=4, color='red')))
+        
+        # 경쟁 주도주들 추가
+        for peer in peers:
+            if peer in df_cum_returns.columns and peer != ticker_input:
+                fig3.add_trace(go.Scatter(x=df_cum_returns.index, y=df_cum_returns[peer], mode='lines', name=peer, line=dict(width=1.5), opacity=0.6))
+                
+        fig3.update_layout(template="plotly_white", height=500, xaxis_title="날짜", yaxis_title="누적 수익률 (%)", margin=dict(l=20, r=20, t=20, b=20))
+        st.plotly_chart(fig3, use_container_width=True)
 
-        # 3. 선형 회귀 분석 데이터 준비
-        X = df_returns[[x_col]].values  # S&P 500 수익률
-        y = df_returns[y_col].values    # 개별 종목 수익률
-        
-        # 회귀 모델 훈련
-        model = LinearRegression()
-        model.fit(X, y)
-        
-        # 회귀 직선 상의 예측값 계산
-        X_range = np.linspace(X.min(), X.max(), 100).reshape(-1, 1)
-        y_pred = model.predict(X_range)
-        
-        # 회귀 지표 계산
-        beta = model.coef_[0]
-        alpha = model.intercept_
-        r_squared = model.score(X, y)
-        
-        # 4. 주요 지표(Metric) 시각화
-        col1, col2, col3 = st.columns(3)
-        col1.metric(label="Beta (시장 민감도)", value=f"{beta:.4f}")
-        col2.metric(label="Alpha (초과 수익률)", value=f"{alpha:.4f}%")
-        col3.metric(label="R-squared (모델 설명력)", value=f"{r_squared:.4f}")
-        
-        # 5. Plotly를 활용한 인터랙티브 그래프 생성
-        fig = go.Figure()
-        
-        # 일별 수익률 산점도 (Scatter Plot)
-        fig.add_trace(go.Scatter(
-            x=df_returns[x_col],
-            y=df_returns[y_col],
-            mode='markers',
-            name='일별 수익률 매핑',
-            marker=dict(color='rgba(99, 110, 250, 0.4)', size=6),
-            hovertemplate="S&P 500: %{x:.2f}%<br>"+f"{ticker_input}: "+"%{y:.2f}%<extra></extra>"
-        ))
-        
-        # 추세선 (Regression Line)
-        fig.add_trace(go.Scatter(
-            x=X_range.flatten(),
-            y=y_pred,
-            mode='lines',
-            name=f'회귀 직선 (y = {beta:.3f}x + {alpha:.3f})',
-            line=dict(color='red', width=3)
-        ))
-        
-        # 레이아웃 스타일 설정
-        fig.update_layout(
-            xaxis_title="S&P 500 일별 수익률 (%)",
-            yaxis_title=f"{ticker_input} 일별 수익률 (%)",
-            hovermode="closest",
-            height=650,
-            template="plotly_white",
-            legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
-        )
-        
-        # 대시보드에 그래프 출력
-        st.plotly_chart(fig, use_container_width=True)
-        
 except Exception as e:
-    st.error(f"프로그램 실행 중 오류가 발생했습니다: {e}")
+    st.error(f"대시보드 생성 중 오류 발생: {e}")
